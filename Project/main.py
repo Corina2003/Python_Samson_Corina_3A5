@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+from threading import Thread, Event
+from tkinter import messagebox
 
 def is_valid_url(url):
     return url.startswith("http://") or url.startswith("https://")
@@ -40,3 +42,43 @@ def scrape_links(start_url, search_tag, stop_event, update_gui, delay=1):
         update_gui(f"Unexpected error for main URL {start_url} - {general_main_err}\n")
 
     return links_collected
+
+def run_crawler():
+    start_url = url_entry.get()
+    search_tag = tag_entry.get()
+
+    if not start_url or not search_tag:
+        messagebox.showerror("Input Error", "Please provide both a start URL and a tag.")
+        return
+
+    if not is_valid_url(start_url):
+        messagebox.showerror("Input Error", "Invalid Start URL.")
+        return
+
+    stop_event.clear()
+
+    def update_gui(message):
+        result_text.insert(tk.END, message)
+        result_text.see(tk.END)
+        app.update_idletasks()
+
+    def threaded_crawl():
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, "Crawling pages...\n")
+        found_links = scrape_links(start_url, search_tag, stop_event, update_gui)
+
+        if not stop_event.is_set():
+            result_text.insert(tk.END, "\nCrawling complete.\n")
+
+        if found_links:
+            result_text.insert(tk.END, "\nIdentified Links:\n")
+            for index, (link, size) in enumerate(found_links, start=1):
+                result_text.insert(tk.END, f"{index}. {link} | Size: {size} MB\n")
+        else:
+            result_text.insert(tk.END, "No links found or the provided URL is inaccessible.\n")
+
+    Thread(target=threaded_crawl).start()
+
+def stop_crawler():
+    stop_event.set()
+    result_text.insert(tk.END, "\nCrawling stopped by user.\n")
