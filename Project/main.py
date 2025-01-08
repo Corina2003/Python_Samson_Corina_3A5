@@ -1,8 +1,10 @@
+
 import requests
 from bs4 import BeautifulSoup
-import time
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
 from threading import Thread, Event
-from tkinter import messagebox
+import time
 
 def is_valid_url(url):
     return url.startswith("http://") or url.startswith("https://")
@@ -82,3 +84,29 @@ def run_crawler():
 def stop_crawler():
     stop_event.set()
     result_text.insert(tk.END, "\nCrawling stopped by user.\n")
+
+# GUI setup
+app = tk.Tk()
+app.title("Web Crawler Tool")
+
+stop_event = Event()
+
+# URL input
+tk.Label(app, text="Start URL:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+url_entry = tk.Entry(app, width=50)
+url_entry.grid(row=0, column=1, padx=5, pady=5)
+
+# Tag input
+tk.Label(app, text="Tag:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+tag_entry = tk.Entry(app, width=50)
+tag_entry.grid(row=1, column=1, padx=5, pady=5)
+
+# Buttons
+tk.Button(app, text="Run Crawler", command=run_crawler).grid(row=2, column=0, padx=5, pady=10)
+tk.Button(app, text="Stop Crawler", command=stop_crawler).grid(row=2, column=1, padx=5, pady=10)
+
+# Result display
+result_text = scrolledtext.ScrolledText(app, width=80, height=20)
+result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+
+app.mainloop()
