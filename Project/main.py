@@ -14,110 +14,109 @@ import time
 #Traseul parcurs de tool: Nume link si dimensiune pagina accesata
 #Logul de rulare si erorile aparute
 
+def is_valid_link(link):
+    return link.startswith("http://") or link.startswith("https://")
 
-def is_valid_url(url):
-    return url.startswith("http://") or url.startswith("https://")
+def fetch_links(main_url, keyword, terminate_event, display_log, pause_time=1):
+    collected_links = set()
+    processed_links = set()
+    display_log(f"Opening main page: {main_url}\n")
 
-def scrape_links(start_url, search_tag, stop_event, update_gui, delay=1):
-    links_collected = set()
     try:
-        update_gui(f"Accessing the main page: {start_url}\n")
-        response = requests.get(start_url, timeout=5)
+        response = requests.get(main_url, timeout=5)
         response.raise_for_status()
+    except requests.RequestException as e:
+        display_log(f"Failed to open {main_url} - {e}\n")
+        return collected_links
 
-        parsed_page = BeautifulSoup(response.content, 'html.parser')
+    parsed_content = BeautifulSoup(response.content, 'html.parser')
+    link_elements = parsed_content.find_all('a', href=True)
 
-        for link_tag in parsed_page.find_all('a', href=True):
-            attributes = str(link_tag.attrs)
-            current_link = link_tag.get('href')
+    for element in link_elements:
+        link = element.get('href')
+        attributes = str(element.attrs)
 
-            if search_tag not in attributes:
-                update_gui(f"Skipping link (tag not in <a ...> attributes): {current_link} - Attributes: {attributes}\n")
-                continue
+        if keyword not in attributes or link in processed_links:
+            display_log(f"Ignoring link: {link}\n")
+            continue
 
-            if not current_link.startswith('http'):
-                update_gui(f"Skipping invalid link: {current_link}\n")
-                continue
+        if not is_valid_link(link):
+            display_log(f"Invalid link skipped: {link}\n")
+            continue
 
-            try:
-                time.sleep(delay)
-                check_response = requests.get(current_link, timeout=5)
-                check_response.raise_for_status()
+        processed_links.add(link)
 
-                size_in_mb = round(len(check_response.content) / (1024 * 1024), 3)
-                links_collected.add((current_link, size_in_mb))
-                update_gui(f"Valid link found: {current_link} | Size: {size_in_mb} MB | Attributes: {attributes}\n")
+        try:
+            time.sleep(pause_time)
+            link_response = requests.get(link, timeout=5)
+            link_response.raise_for_status()
+            page_size = round(len(link_response.content) / (1024 * 1024), 3)
+            collected_links.add((link, page_size))
+            display_log(f"Collected: {link} | Size: {page_size} MB\n")
+        except requests.RequestException as error:
+            display_log(f"Error accessing {link}: {error}\n")
+        except Exception as unexpected_error:
+            display_log(f"Unexpected error for {link}: {unexpected_error}\n")
 
-            except requests.RequestException as err:
-                update_gui(f"Error accessing link: {current_link} - {err}\n")
-            except Exception as general_err:
-                update_gui(f"Unexpected error for link: {current_link} - {general_err}\n")
+    return collected_links
 
-    except requests.RequestException as main_err:
-        update_gui(f"Error accessing main URL {start_url} - {main_err}\n")
-    except Exception as general_main_err:
-        update_gui(f"Unexpected error for main URL {start_url} - {general_main_err}\n")
+def initiate_crawler():
+    main_url = url_input.get()
+    keyword = tag_input.get()
 
-    return links_collected
-
-def run_crawler():
-    start_url = url_entry.get()
-    search_tag = tag_entry.get()
-
-    if not start_url or not search_tag:
+    if not main_url or not keyword:
         messagebox.showerror("Input Error", "Please provide both a start URL and a tag.")
         return
 
-    if not is_valid_url(start_url):
+    if not is_valid_link(main_url):
         messagebox.showerror("Input Error", "Invalid Start URL.")
         return
 
-    stop_event.clear()
+    terminate_event.clear()
 
-    def update_gui(message):
-        result_text.insert(tk.END, message)
-        result_text.see(tk.END)
+    def display_log(message):
+        output_text.insert(tk.END, message)
+        output_text.see(tk.END)
         app.update_idletasks()
 
-    def threaded_crawl():
-        result_text.delete(1.0, tk.END)
-        result_text.insert(tk.END, "Crawling pages...\n")
-        found_links = scrape_links(start_url, search_tag, stop_event, update_gui)
+    def threaded_scan():
+        output_text.delete(1.0, tk.END)
+        output_text.insert(tk.END, "Scanning pages...\n")
+        found_links = fetch_links(main_url, keyword, terminate_event, display_log)
 
-        if not stop_event.is_set():
-            result_text.insert(tk.END, "\nCrawling complete.\n")
+        if not terminate_event.is_set():
+            output_text.insert(tk.END, "\nScanning completed.\n")
 
         if found_links:
-            result_text.insert(tk.END, "\nIdentified Links:\n")
+            output_text.insert(tk.END, "\nIdentified Links:\n")
             for index, (link, size) in enumerate(found_links, start=1):
-                result_text.insert(tk.END, f"{index}. {link} | Size: {size} MB\n")
+                output_text.insert(tk.END, f"{index}. {link} | Size: {size} MB\n")
         else:
-            result_text.insert(tk.END, "No links found or the provided URL is inaccessible.\n")
+            output_text.insert(tk.END, "No matching links found or URL is inaccessible.\n")
 
-    Thread(target=threaded_crawl).start()
+    Thread(target=threaded_scan).start()
 
-def stop_crawler():
-    stop_event.set()
-    result_text.insert(tk.END, "\nCrawling stopped by user.\n")
+def halt_crawler():
+    terminate_event.set()
+    output_text.insert(tk.END, "\nScanning stopped by user.\n")
 
 app = tk.Tk()
-app.title("Web Crawler Tool")
+app.title("Web Scanner Tool")
 
-stop_event = Event()
+terminate_event = Event()
 
 tk.Label(app, text="Start URL:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-url_entry = tk.Entry(app, width=50)
-url_entry.grid(row=0, column=1, padx=5, pady=5)
+url_input = tk.Entry(app, width=50)
+url_input.grid(row=0, column=1, padx=5, pady=5)
 
 tk.Label(app, text="Tag:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-tag_entry = tk.Entry(app, width=50)
-tag_entry.grid(row=1, column=1, padx=5, pady=5)
+tag_input = tk.Entry(app, width=50)
+tag_input.grid(row=1, column=1, padx=5, pady=5)
 
-tk.Button(app, text="Run Crawler", command=run_crawler).grid(row=2, column=0, padx=5, pady=10)
-tk.Button(app, text="Stop Crawler", command=stop_crawler).grid(row=2, column=1, padx=5, pady=10)
+tk.Button(app, text="Start Scan", command=initiate_crawler).grid(row=2, column=0, padx=5, pady=10)
+tk.Button(app, text="Stop Scan", command=halt_crawler).grid(row=2, column=1, padx=5, pady=10)
 
-result_text = scrolledtext.ScrolledText(app, width=80, height=20)
-result_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+output_text = scrolledtext.ScrolledText(app, width=80, height=20)
+output_text.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
 
 app.mainloop()
-
